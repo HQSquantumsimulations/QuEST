@@ -1,9 +1,10 @@
-
 # This makefile builds the QuEST library and links/compiles user code
 # While attempting to accomodate as many platforms and compilers,
 # unforeseen problems are inevitable: please email anna.brown@oerc.ox.ac.uk
-# or tyson.jones@materials.ox.ac.uk about any errors or complications, or 
+# or tyson.jones@materials.ox.ac.uk about any errors or complications, or
 # raise an issue on Github
+
+# TODO: adjust compiler settigs for MPI and GPU!
 
 #======================================================================#
 #                                                                      #
@@ -15,12 +16,12 @@
 EXE = demo
 
 # space-separated names (no file type) of all user source files (.c or .cpp) in the root directory
-SOURCES = damping_example
+# SOURCES =
 
 # path to QuEST library from root directory
-QUEST_DIR = QuEST/src
+#QUEST_DIR = ../QuEST/QuEST
+QUEST_DIR = ../../QuEST/QuEST/src
 QUEST_INCLUDE_DIR = ${QUEST_DIR}/../include
-
 # compiler to use, which should support both C and C++, to be wrapped by GPU/MPI compilers
 COMPILER = gcc
 
@@ -29,7 +30,7 @@ COMPILER_TYPE = GNU
 
 # hardwares to target: 1 means use, 0 means don't use
 MULTITHREADED = 1
-DISTRIBUTED = 0
+DISTRIBUTED = 1
 GPUACCELERATED = 0
 
 # GPU hardware dependent, lookup at https://developer.nvidia.com/cuda-gpus, write without fullstop
@@ -40,6 +41,8 @@ SUPPRESS_WARNING = 0
 
 # whether to use single, double or quad floating point precision in the state-vector {1,2,4}
 PRECISION = 2
+
+
 
 #======================================================================#
 #                                                                      #
@@ -78,7 +81,7 @@ ifneq ($(SILENT), 1)
         override MULTITHREADED = 0
     endif
     endif
-	
+
     # CLANG compilers don't support threading
     ifeq ($(MULTITHREADED), 1)
     ifeq ($(COMPILER_TYPE), CLANG)
@@ -86,7 +89,7 @@ ifneq ($(SILENT), 1)
         override MULTITHREADED = 0
     endif
     endif
-	
+
 	# check PRECISION is valid
     ifneq ($(PRECISION), 1)
     ifneq ($(PRECISION), 2)
@@ -95,15 +98,15 @@ ifneq ($(SILENT), 1)
     endif
     endif
     endif
-	
+
 	# GPU does not support quad precision
     ifeq ($(PRECISION), 4)
     ifeq ($(GPUACCELERATED), 1)
     $(warning GPUs do not support quad precision. Setting PRECISION=2...)
-    override PRECISION = 2	
+    override PRECISION = 2
     endif
     endif
-	
+
     # NVCC doesn't support new CLANG compilers
     ifeq ($(GPUACCELERATED), 1)
     ifeq ($(COMPILER_TYPE), CLANG)
@@ -186,7 +189,7 @@ endif
 
 # c
 C_CLANG_FLAGS = -O2 -std=c99 -mavx -Wall -DQuEST_PREC=$(PRECISION)
-C_GNU_FLAGS = -O2 -std=c99 -mavx -Wall -DQuEST_PREC=$(PRECISION) $(THREAD_FLAGS)
+C_GNU_FLAGS = -O2 -std=c99 -mavx -Wall -DQuEST_PREC=$(PRECISION) $(THREAD_FLAGS) -fpic
 C_INTEL_FLAGS = -O2 -std=c99 -fprotect-parens -Wall -xAVX -axCORE-AVX2 -diag-disable -cpu-dispatch -DQuEST_PREC=$(PRECISION) $(THREAD_FLAGS)
 
 # c++
@@ -209,12 +212,6 @@ else ifeq ($(COMPILER_TYPE), INTEL)
     CPP_FLAGS = $(CPP_INTEL_FLAGS)
 endif
 
-ifeq ($(TEST), 1)
-	QUEST_LIB := libQuEST
-	LIB_EXT = .so
-	LIB_NAME = $(addsuffix $(LIB_EXT), $(QUEST_LIB))
-	C_FLAGS += -fPIC
-endif
 
 
 #
@@ -265,7 +262,7 @@ ifeq ($(GPUACCELERATED), 1)
 	$(CUDA_COMPILER) -dc $(CPP_CUDA_FLAGS) $(QUEST_INCLUDE) $<
   %.o: $(QUEST_INNER_DIR)/%.cu
 	$(CUDA_COMPILER) -dc $(CPP_CUDA_FLAGS) $<
-	
+
   %.o: %.cpp
 	$(CUDA_COMPILER) -dc $(CPP_CUDA_FLAGS) $(QUEST_INCLUDE) $<
   %.o: $(QUEST_INNER_DIR)/%.cpp
@@ -280,7 +277,7 @@ else ifeq ($(DISTRIBUTED), 1)
 	$(MPI_WRAPPED_COMP) $(MPI_COMPILER) -x c $(C_FLAGS) $(QUEST_INCLUDE) -c $<
   %.o: $(QUEST_COMMON_DIR)/%.c
 	$(MPI_WRAPPED_COMP) $(MPI_COMPILER) -x c $(C_FLAGS) $(QUEST_INCLUDE) -c $<
-	
+
   %.o: %.cpp
 	$(MPI_WRAPPED_COMP) $(MPI_COMPILER) $(CPP_FLAGS) $(QUEST_INCLUDE) -c $<
   %.o: $(QUEST_INNER_DIR)/%.cpp
@@ -295,11 +292,11 @@ else
 	$(COMPILER) -x c $(C_FLAGS) $(QUEST_INCLUDE) -c $<
   %.o: $(QUEST_COMMON_DIR)/%.c
 	$(COMPILER) -x c $(C_FLAGS) $(QUEST_INCLUDE) -c $<
-	
+
   %.o: %.cpp
 	$(COMPILER) $(CPP_FLAGS) $(QUEST_INCLUDE) -c $<
   %.o: $(QUEST_INNER_DIR)/%.cpp
-	$(COMPILER) $(CPP_FLAGS)  -c $<
+	$(COMPILER) $(CPP_FLAGS) -c $<
 
 endif
 
@@ -313,26 +310,27 @@ endif
 ifeq ($(GPUACCELERATED), 1)
 
   all:	$(OBJ)
-		$(CUDA_COMPILER) $(CPP_CUDA_FLAGS) $(QUEST_INCLUDE) -o $(EXE) $(OBJ) $(LIBS)
+		$(CUDA_COMPILER) $(CPP_CUDA_FLAGS) $(QUEST_INCLUDE) -o ../build/QuEST/libQuEST.so $(OBJ) $(LIBS)
 
 # MPI
 else ifeq ($(DISTRIBUTED), 1)
 
   default:	$(EXE)
   $(EXE):	$(OBJ)
-			$(MPI_WRAPPED_COMP) $(MPI_COMPILER) $(C_FLAGS) $(QUEST_INCLUDE) -o $(EXE) $(OBJ) $(LIBS) 
+			$(MPI_WRAPPED_COMP) $(MPI_COMPILER) $(C_FLAGS) -shared $(QUEST_INCLUDE) -o  ../build/QuEST/libQuEST.so $(OBJ) $(LIBS)
 
 # C
 else
 
   default:	$(EXE)
   $(EXE):	$(OBJ)
-			$(COMPILER) $(C_FLAGS) $(QUEST_INCLUDE) -o $(EXE) $(OBJ) $(LIBS) 
+			$(COMPILER) $(C_FLAGS) -shared $(QUEST_INCLUDE) -o ../build/QuEST/libQuEST.so $(OBJ) $(LIBS)
+  # default:	$(EXE)
+  # $(EXE):	$(OBJ)
+	# 		$(COMPILER) $(C_FLAGS) $(QUEST_INCLUDE) -o libQuEST.so $(OBJ) $(LIBS)
 
 endif
 
-test: $(OBJ)
-	$(COMPILER) $(C_FLAGS)  -shared -Wl,-soname,$(QUEST_LIB) $(QUEST_INCLUDE) -o $(LIB_NAME) $(OBJ) $(LIBS)
 
 
 #
@@ -350,7 +348,7 @@ veryclean:	clean
 #
 # --- debug
 #
-	
+
 print-%:
 	@echo $*=$($*)
 
